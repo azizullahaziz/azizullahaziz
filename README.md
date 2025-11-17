@@ -38,8 +38,12 @@ I’m **Azizullah Aziz**, a passionate **Full-Stack Developer**, **DevOps Engine
 ```mermaid
 journey
     title My Tech Journey
+    section 2016
+      Started programming (PHP/HTML/CSS/JS): 5
+    section 2017
+      PHP & CodeIgniter
     section 2018
-      Started programming (HTML/CSS/JS): 5
+      Node.js & Express.js
     section 2019
       PHP & Laravel development: 5
     section 2020
@@ -80,7 +84,6 @@ Event-driven messaging using queues + API integration.
 Zero-downtime automatic deployments using GitHub Actions.  
 **Tech:** Docker, CI/CD, Testing
 
-*(Add screenshots later if you want.)*
 
 ---
 
