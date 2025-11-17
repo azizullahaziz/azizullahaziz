@@ -54,7 +54,7 @@ journey
       Full-stack systems with Laravel + React: 5
     section 2025
       Advanced DevOps + production automation: 5
-
+```
 
 
 # 🧰 Tools I Use Daily
