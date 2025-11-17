@@ -5,7 +5,7 @@
 
 <!-- ANIMATED INTRO -->
 <h3 align="center">
-  <img src="https://readme-typing-svg.herokuapp.com?size=25&duration=3500&color=00D1F7&center=true&vCenter=true&lines=Full-Stack+Developer;DevOps+Engineer+(CI/CD+%26+Docker);Scalable+Systems+Architect;MIS+%2F+Information+Systems+Specialist;Open+Source+Contributor" />
+  <img src="https://readme-typing-svg.herokuapp.com?size=22&duration=3500&color=00D1F7&center=true&vCenter=true&lines=Full-Stack+Developer;DevOps+Engineer+(CI/CD+%26+Docker);Scalable+Systems+Architect;MIS+%2F+Information+Systems+Specialist;Open+Source+Contributor" />
 </h3>
 
 <p align="center">
@@ -67,7 +67,7 @@ Zero-downtime automatic deployments using GitHub Actions.
 
 # 📄 Download My Resume
 <p align="center"> <a href="#" target="_blank"> <img src="https://img.shields.io/badge/Resume-Download-blue?style=for-the-badge&logo=readthedocs" /> </a> </p>
-*(Give me your PDF link and I'll embed it here.)*
+
 
 ---
 
