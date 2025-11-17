@@ -41,9 +41,9 @@ journey
     section 2016
       Started programming (PHP/HTML/CSS/JS): 5
     section 2017
-      PHP & CodeIgniter
+      PHP & CodeIgniter: 5
     section 2018
-      Node.js & Express.js
+      Node.js & Express.js: 5
     section 2019
       PHP & Laravel development: 5
     section 2020
