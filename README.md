@@ -39,25 +39,25 @@ I’m **Azizullah Aziz**, a passionate **Full-Stack Developer**, **DevOps Engine
 journey
     title My Tech Journey
     section 2016
-      Started programming (PHP/HTML/CSS/JS): 5
+      Started programming (PHP/HTML/CSS/JS): 10
     section 2017
       PHP & CodeIgniter: 5
     section 2018
-      Node.js & Express.js: 5
+      Node.js & Express.js: 2
     section 2019
-      PHP & Laravel development: 5
+      PHP & Laravel development: 9
     section 2020
-      PostgreSQL, MySQL, API architecture: 5
+      PostgreSQL, MySQL, API architecture: 10
     section 2021
-      Docker & DevOps pipelines: 5
+      Docker & DevOps pipelines: 2
     section 2022
-      MIS & HMIS enterprise systems: 5
+      MIS & HMIS enterprise systems: 3
     section 2023
-      Scalable microservices architecture: 5
+      Scalable microservices architecture: 1
     section 2024
-      Full-stack systems with Laravel + React: 5
+      Full-stack systems with Laravel + React: 6
     section 2025
-      Advanced DevOps + production automation: 5
+      Advanced DevOps + production automation: 1
 ```
 
 
