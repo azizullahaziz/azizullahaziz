@@ -5,7 +5,7 @@
 
 <!-- ANIMATED INTRO -->
 <h3 align="center">
-  <img src="https://readme-typing-svg.herokuapp.com?size=22&duration=3500&color=00D1F7&center=true&vCenter=true&lines=Full-Stack+Developer;DevOps+Engineer+(CI/CD+%26+Docker);Scalable+Systems+Architect;MIS+%2F+Information+Systems+Specialist;Open+Source+Contributor" />
+  <img src="https://readme-typing-svg.herokuapp.com?size=22&duration=3500&color=00D1F7&center=true&vCenter=true&lines=Full-Stack+Developer;DevOps+Engineer+(CI/CD+%26+Docker);Scalable+Systems+Architect;MIS+Information+Systems+Specialist;Open+Source+Contributor" />
 </h3>
 
 <p align="center">
@@ -39,25 +39,25 @@ I’m **Azizullah Aziz**, a passionate **Full-Stack Developer**, **DevOps Engine
 journey
     title My Tech Journey
     section 2016
-      Started programming (PHP/HTML/CSS/JS): 10
+      Started programming (PHP/HTML/CSS/JS): 8
     section 2017
       PHP & CodeIgniter: 5
     section 2018
-      Node.js & Express.js: 2
+      Node.js & Express.js: 4
     section 2019
       PHP & Laravel development: 9
     section 2020
-      PostgreSQL, MySQL, API architecture: 10
+      PostgreSQL, MySQL, API architecture: 8
     section 2021
-      Docker & DevOps pipelines: 2
+      Docker & DevOps pipelines: 4
     section 2022
-      MIS & HMIS enterprise systems: 3
+      MIS & HMIS enterprise systems: 6
     section 2023
-      Scalable microservices architecture: 1
+      Scalable microservices architecture: 4
     section 2024
-      Full-stack systems with Laravel + React: 6
+      Full-stack systems with Laravel + React: 7
     section 2025
-      Advanced DevOps + production automation: 1
+      Advanced DevOps + production automation: 4
 ```
 
 
