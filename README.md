@@ -5,7 +5,7 @@
 
 <!-- ANIMATED INTRO -->
 <h3 align="center">
-  <img src="https://readme-typing-svg.herokuapp.com?size=22&duration=3500&color=00D1F7&center=true&vCenter=true&lines=Full-Stack+Developer;DevOps+Engineer+(CI/CD+%26+Docker);Scalable+Systems+Architect;MIS+Information+Systems+Specialist;Open+Source+Contributor" />
+  <img src="https://readme-typing-svg.herokuapp.com?size=21&duration=3500&color=00D1F7&center=true&vCenter=true&lines=Full-Stack+Developer;DevOps+Engineer+(CI/CD+%26+Docker);Scalable+Systems+Architect;MIS+Information+Systems+Specialist;Open+Source+Contributor" />
 </h3>
 
 <p align="center">
