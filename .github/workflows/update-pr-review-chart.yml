@@ -1,0 +1,40 @@
+name: Update Pull Request and Code Review Chart
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-chart:
+    name: Generate contribution chart
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout profile repository
+        uses: actions/checkout@v5
+
+      - name: Generate PR and review chart
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_LOGIN: azizullahaziz
+        run: node scripts/generate-pr-review-chart.mjs
+
+      - name: Commit updated chart
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add assets/pr-review-chart.svg
+
+          if git diff --cached --quiet; then
+            echo "No chart changes detected."
+            exit 0
+          fi
+
+          git commit -m "chore: update pull request and review chart"
+          git push
