@@ -77,16 +77,26 @@ async function fetchPullRequests() {
   console.log(`Fetched ${items.length} PRs authored by ${githubLogin}`);
 }
 
+function getPrReviewsUrl(pr) {
+  // pr.pull_request.url is like https://api.github.com/repos/owner/repo/pulls/123
+  // We need https://api.github.com/repos/owner/repo/pulls/123/reviews
+  if (!pr.pull_request || !pr.pull_request.url) {
+    throw new Error(`Unexpected search result without pull_request.url: ${pr.html_url}`);
+  }
+  return `${pr.pull_request.url}/reviews`;
+}
+
 async function fetchReviews() {
-  // Search for PRs that the user reviewed in the range
-  const query = `type:pr reviewed-by:${githubLogin} updated:${rangeStart}..${rangeEnd}`;
+  // Use a broad search for PRs reviewed by the user; the per-PR review fetch
+  // then filters review submissions strictly by submitted_at within our months.
+  // We intentionally omit a date qualifier here so we don't miss reviews that
+  // were submitted during the window but the PR was last updated outside it.
+  const query = `type:pr reviewed-by:${githubLogin}`;
   const prs = await searchAllPages(query);
   console.log(`Found ${prs.length} PRs reviewed by ${githubLogin}, fetching individual reviews...`);
 
   for (const pr of prs) {
-    // Extract owner/repo/number from pull_request.url
-    // item.pull_request.url: https://api.github.com/repos/owner/repo/pulls/number
-    const prUrl = item_to_reviews_url(pr);
+    const prUrl = getPrReviewsUrl(pr);
     let page = 1;
     while (true) {
       const reviews = await githubGet(`${prUrl}?per_page=100&page=${page}`);
@@ -107,15 +117,6 @@ async function fetchReviews() {
     }
     await new Promise((r) => setTimeout(r, 200));
   }
-}
-
-function item_to_reviews_url(pr) {
-  // pr.pull_request.url is like https://api.github.com/repos/owner/repo/pulls/123
-  // We need https://api.github.com/repos/owner/repo/pulls/123/reviews
-  const base = pr.pull_request
-    ? pr.pull_request.url
-    : pr.url.replace("/issues/", "/pulls/");
-  return `${base}/reviews`;
 }
 
 function escapeXml(value) {
