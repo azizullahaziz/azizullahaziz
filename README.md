@@ -256,14 +256,16 @@ This chart compares **pull requests opened** with **pull-request reviews complet
 
 ## 📈 GitHub Overview
 
+> Analytics assets are generated automatically by GitHub Actions and committed to this repository.
+
 <p align="center">
   <img
-    src="https://github-readme-stats.vercel.app/api?username=azizullahaziz&show_icons=true&hide_border=true&rank_icon=github&theme=tokyonight&custom_title=GitHub%20Overview"
+    src="./assets/github-overview.svg"
     width="49%"
     alt="GitHub overview statistics"
   />
   <img
-    src="https://github-readme-streak-stats.herokuapp.com/?user=azizullahaziz&theme=tokyonight&hide_border=true"
+    src="./assets/github-streak.svg"
     width="49%"
     alt="GitHub contribution streak"
   />
@@ -271,7 +273,7 @@ This chart compares **pull requests opened** with **pull-request reviews complet
 
 <p align="center">
   <img
-    src="https://github-readme-stats.vercel.app/api/top-langs/?username=azizullahaziz&layout=compact&hide_border=true&theme=tokyonight&langs_count=8"
+    src="./assets/github-top-languages.svg"
     width="49%"
     alt="Most used programming languages"
   />

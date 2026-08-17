@@ -10,161 +10,112 @@ if (!githubToken) {
 
 const now = new Date();
 
-const from = new Date(
-  Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 11, 1)
+// Build 12 calendar months: from start of (currentMonth - 11) through end of currentMonth
+const months = [];
+for (let index = 11; index >= 0; index--) {
+  const date = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - index, 1)
+  );
+  months.push({
+    key: `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`,
+    label: date.toLocaleString("en-US", { month: "short", timeZone: "UTC" }),
+    year: date.getUTCFullYear(),
+    pullRequests: 0,
+    reviews: 0,
+  });
+}
+
+const firstMonth = months[0];
+const lastMonth = months[months.length - 1];
+const rangeStart = `${firstMonth.year}-${firstMonth.key.slice(5)}-01`;
+const lastDate = new Date(
+  Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)
 );
+const rangeEnd = `${lastDate.getUTCFullYear()}-${String(lastDate.getUTCMonth() + 1).padStart(2, "0")}-${String(lastDate.getUTCDate()).padStart(2, "0")}`;
 
-const to = new Date(
-  Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth() + 1,
-    0,
-    23,
-    59,
-    59,
-    999
-  )
-);
+const monthMap = new Map(months.map((m) => [m.key, m]));
 
-const graphqlQuery = `
-  query (
-    $login: String!,
-    $from: DateTime!,
-    $to: DateTime!,
-    $pullRequestCursor: String,
-    $reviewCursor: String
-  ) {
-    user(login: $login) {
-      contributionsCollection(from: $from, to: $to) {
-        pullRequestContributions(
-          first: 100
-          after: $pullRequestCursor
+async function githubGet(url) {
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `token ${githubToken}`,
+      Accept: "application/vnd.github+json",
+      "User-Agent": "azizullahaziz-pr-review-chart",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`GitHub API error ${response.status}: ${text}`);
+  }
+  return response.json();
+}
+
+async function searchAllPages(queryString) {
+  const items = [];
+  let page = 1;
+  while (true) {
+    const url = `https://api.github.com/search/issues?q=${encodeURIComponent(queryString)}&per_page=100&page=${page}`;
+    const data = await githubGet(url);
+    items.push(...data.items);
+    if (items.length >= data.total_count || data.items.length < 100) break;
+    page++;
+    // Respect secondary rate limit
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  return items;
+}
+
+async function fetchPullRequests() {
+  const query = `type:pr author:${githubLogin} created:${rangeStart}..${rangeEnd}`;
+  const items = await searchAllPages(query);
+  for (const item of items) {
+    const key = item.created_at.slice(0, 7); // "YYYY-MM"
+    const month = monthMap.get(key);
+    if (month) month.pullRequests++;
+  }
+  console.log(`Fetched ${items.length} PRs authored by ${githubLogin}`);
+}
+
+function getPrReviewsUrl(pr) {
+  // pr.pull_request.url is like https://api.github.com/repos/owner/repo/pulls/123
+  // We need https://api.github.com/repos/owner/repo/pulls/123/reviews
+  if (!pr.pull_request || !pr.pull_request.url) {
+    throw new Error(`Unexpected search result without pull_request.url: ${pr.html_url}`);
+  }
+  return `${pr.pull_request.url}/reviews`;
+}
+
+async function fetchReviews() {
+  // Use a broad search for PRs reviewed by the user; the per-PR review fetch
+  // then filters review submissions strictly by submitted_at within our months.
+  // We intentionally omit a date qualifier here so we don't miss reviews that
+  // were submitted during the window but the PR was last updated outside it.
+  const query = `type:pr reviewed-by:${githubLogin}`;
+  const prs = await searchAllPages(query);
+  console.log(`Found ${prs.length} PRs reviewed by ${githubLogin}, fetching individual reviews...`);
+
+  for (const pr of prs) {
+    const prUrl = getPrReviewsUrl(pr);
+    let page = 1;
+    while (true) {
+      const reviews = await githubGet(`${prUrl}?per_page=100&page=${page}`);
+      for (const review of reviews) {
+        if (
+          review.user &&
+          review.user.login.toLowerCase() === githubLogin.toLowerCase() &&
+          review.submitted_at
         ) {
-          nodes {
-            occurredAt
-          }
-          pageInfo {
-            hasNextPage
-            endCursor
-          }
-        }
-
-        pullRequestReviewContributions(
-          first: 100
-          after: $reviewCursor
-        ) {
-          nodes {
-            occurredAt
-          }
-          pageInfo {
-            hasNextPage
-            endCursor
-          }
+          const key = review.submitted_at.slice(0, 7);
+          const month = monthMap.get(key);
+          if (month) month.reviews++;
         }
       }
+      if (reviews.length < 100) break;
+      page++;
+      await new Promise((r) => setTimeout(r, 200));
     }
-  }
-`;
-
-async function fetchContributions() {
-  const pullRequests = [];
-  const reviews = [];
-
-  let pullRequestCursor = null;
-  let reviewCursor = null;
-  let pullRequestsComplete = false;
-  let reviewsComplete = false;
-
-  while (!pullRequestsComplete || !reviewsComplete) {
-    const response = await fetch("https://api.github.com/graphql", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${githubToken}`,
-        "Content-Type": "application/json",
-        Accept: "application/vnd.github+json",
-        "User-Agent": "azizullahaziz-pr-review-chart"
-      },
-      body: JSON.stringify({
-        query: graphqlQuery,
-        variables: {
-          login: githubLogin,
-          from: from.toISOString(),
-          to: to.toISOString(),
-          pullRequestCursor,
-          reviewCursor
-        }
-      })
-    });
-
-    const result = await response.json();
-
-    if (!response.ok || result.errors) {
-      console.error(JSON.stringify(result, null, 2));
-      throw new Error("GitHub GraphQL request failed.");
-    }
-
-    const contributions = result.data.user.contributionsCollection;
-
-    if (!pullRequestsComplete) {
-      const connection = contributions.pullRequestContributions;
-
-      pullRequests.push(...connection.nodes);
-
-      pullRequestsComplete = !connection.pageInfo.hasNextPage;
-      pullRequestCursor = connection.pageInfo.endCursor;
-    }
-
-    if (!reviewsComplete) {
-      const connection = contributions.pullRequestReviewContributions;
-
-      reviews.push(...connection.nodes);
-
-      reviewsComplete = !connection.pageInfo.hasNextPage;
-      reviewCursor = connection.pageInfo.endCursor;
-    }
-  }
-
-  return {
-    pullRequests,
-    reviews
-  };
-}
-
-function createMonths() {
-  const months = [];
-
-  for (let index = 11; index >= 0; index--) {
-    const date = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - index, 1)
-    );
-
-    months.push({
-      key: `${date.getUTCFullYear()}-${String(
-        date.getUTCMonth() + 1
-      ).padStart(2, "0")}`,
-      label: date.toLocaleString("en-US", {
-        month: "short",
-        timeZone: "UTC"
-      }),
-      pullRequests: 0,
-      reviews: 0
-    });
-  }
-
-  return months;
-}
-
-function addContribution(monthMap, occurredAt, property) {
-  const date = new Date(occurredAt);
-
-  const key = `${date.getUTCFullYear()}-${String(
-    date.getUTCMonth() + 1
-  ).padStart(2, "0")}`;
-
-  const month = monthMap.get(key);
-
-  if (month) {
-    month[property] += 1;
+    await new Promise((r) => setTimeout(r, 200));
   }
 }
 
@@ -180,269 +131,88 @@ function escapeXml(value) {
 function generateChart(months) {
   const width = 920;
   const height = 440;
-
-  const padding = {
-    top: 82,
-    right: 45,
-    bottom: 92,
-    left: 65
-  };
-
+  const padding = { top: 82, right: 45, bottom: 92, left: 65 };
   const chartWidth = width - padding.left - padding.right;
   const chartHeight = height - padding.top - padding.bottom;
 
   const maxValue = Math.max(
     1,
-    ...months.flatMap((month) => [
-      month.pullRequests,
-      month.reviews
-    ])
+    ...months.flatMap((m) => [m.pullRequests, m.reviews])
   );
 
-  const x = (index) => {
-    if (months.length === 1) {
-      return padding.left + chartWidth / 2;
-    }
+  const x = (i) =>
+    months.length === 1
+      ? padding.left + chartWidth / 2
+      : padding.left + (i * chartWidth) / (months.length - 1);
 
-    return padding.left + (index * chartWidth) / (months.length - 1);
-  };
+  const y = (v) =>
+    padding.top + chartHeight - (v / maxValue) * chartHeight;
 
-  const y = (value) =>
-    padding.top + chartHeight - (value / maxValue) * chartHeight;
-
-  const linePath = (property) =>
+  const linePath = (prop) =>
     months
-      .map(
-        (month, index) =>
-          `${index === 0 ? "M" : "L"} ${x(index)} ${y(
-            month[property]
-          )}`
-      )
+      .map((m, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${y(m[prop])}`)
       .join(" ");
 
-  const totalPullRequests = months.reduce(
-    (total, month) => total + month.pullRequests,
-    0
-  );
+  const totalPRs = months.reduce((s, m) => s + m.pullRequests, 0);
+  const totalReviews = months.reduce((s, m) => s + m.reviews, 0);
 
-  const totalReviews = months.reduce(
-    (total, month) => total + month.reviews,
-    0
-  );
-
-  const gridLines = Array.from({ length: 5 }, (_, index) => {
-    const value = Math.round((maxValue * index) / 4);
+  const gridLines = Array.from({ length: 5 }, (_, i) => {
+    const value = Math.round((maxValue * i) / 4);
     const lineY = y(value);
-
     return `
-      <line
-        x1="${padding.left}"
-        y1="${lineY}"
-        x2="${width - padding.right}"
-        y2="${lineY}"
-        stroke="#26334D"
-        stroke-width="1"
-      />
-
-      <text
-        x="${padding.left - 12}"
-        y="${lineY + 5}"
-        text-anchor="end"
-        fill="#8B9BB4"
-        font-family="Arial, sans-serif"
-        font-size="12"
-      >${value}</text>
-    `;
+      <line x1="${padding.left}" y1="${lineY}" x2="${width - padding.right}" y2="${lineY}" stroke="#26334D" stroke-width="1"/>
+      <text x="${padding.left - 12}" y="${lineY + 5}" text-anchor="end" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="12">${value}</text>`;
   }).join("");
 
   const monthLabels = months
     .map(
-      (month, index) => `
-        <text
-          x="${x(index)}"
-          y="${height - 48}"
-          text-anchor="middle"
-          fill="#8B9BB4"
-          font-family="Arial, sans-serif"
-          font-size="12"
-        >${escapeXml(month.label)}</text>
-      `
+      (m, i) =>
+        `<text x="${x(i)}" y="${height - 48}" text-anchor="middle" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="12">${escapeXml(m.label)}</text>`
     )
     .join("");
 
-  const chartPoints = (property, color) =>
+  const points = (prop, color) =>
     months
       .map(
-        (month, index) => `
-          <circle
-            cx="${x(index)}"
-            cy="${y(month[property])}"
-            r="4"
-            fill="${color}"
-            stroke="#101827"
-            stroke-width="2"
-          />
-        `
+        (m, i) =>
+          `<circle cx="${x(i)}" cy="${y(m[prop])}" r="4" fill="${color}" stroke="#101827" stroke-width="2"/>`
       )
       .join("");
 
-  return `
-<svg
-  xmlns="http://www.w3.org/2000/svg"
-  width="${width}"
-  height="${height}"
-  viewBox="0 0 ${width} ${height}"
-  role="img"
-  aria-labelledby="title description"
->
-  <title id="title">
-    Pull Requests Opened and Code Reviews Completed
-  </title>
-
-  <desc id="description">
-    Monthly pull requests opened and pull-request reviews completed for ${escapeXml(
-      githubLogin
-    )} during the last twelve months.
-  </desc>
-
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="prc-title prc-desc">
+  <title id="prc-title">Pull Requests Opened and Code Reviews Completed</title>
+  <desc id="prc-desc">Monthly pull requests opened and pull-request reviews completed for ${escapeXml(githubLogin)} during the last twelve months.</desc>
   <defs>
-    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#101827" />
-      <stop offset="100%" stop-color="#16243D" />
+    <linearGradient id="prc-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#101827"/>
+      <stop offset="100%" stop-color="#16243D"/>
     </linearGradient>
   </defs>
-
-  <rect
-    width="100%"
-    height="100%"
-    rx="18"
-    fill="url(#background)"
-  />
-
-  <text
-    x="${padding.left}"
-    y="34"
-    fill="#FFFFFF"
-    font-family="Arial, sans-serif"
-    font-size="21"
-    font-weight="700"
-  >
-    Pull Requests &amp; Code Reviews
-  </text>
-
-  <text
-    x="${padding.left}"
-    y="57"
-    fill="#8B9BB4"
-    font-family="Arial, sans-serif"
-    font-size="12"
-  >
-    Monthly engineering collaboration · Last 12 months · ${escapeXml(
-      githubLogin
-    )}
-  </text>
-
-  <line
-    x1="${width - 300}"
-    y1="30"
-    x2="${width - 275}"
-    y2="30"
-    stroke="#00D4FF"
-    stroke-width="3"
-  />
-
-  <text
-    x="${width - 265}"
-    y="34"
-    fill="#C9D5E8"
-    font-family="Arial, sans-serif"
-    font-size="12"
-  >
-    PRs opened (${totalPullRequests})
-  </text>
-
-  <line
-    x1="${width - 300}"
-    y1="53"
-    x2="${width - 275}"
-    y2="53"
-    stroke="#9B7CFF"
-    stroke-width="3"
-  />
-
-  <text
-    x="${width - 265}"
-    y="57"
-    fill="#C9D5E8"
-    font-family="Arial, sans-serif"
-    font-size="12"
-  >
-    Reviews completed (${totalReviews})
-  </text>
-
+  <rect width="100%" height="100%" rx="18" fill="url(#prc-bg)"/>
+  <text x="${padding.left}" y="34" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="21" font-weight="700">Pull Requests &amp; Code Reviews</text>
+  <text x="${padding.left}" y="57" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="12">Monthly engineering collaboration · Last 12 months · ${escapeXml(githubLogin)}</text>
+  <line x1="${width - 300}" y1="30" x2="${width - 275}" y2="30" stroke="#00D4FF" stroke-width="3"/>
+  <text x="${width - 265}" y="34" fill="#C9D5E8" font-family="Arial, sans-serif" font-size="12">PRs opened (${totalPRs})</text>
+  <line x1="${width - 300}" y1="53" x2="${width - 275}" y2="53" stroke="#9B7CFF" stroke-width="3"/>
+  <text x="${width - 265}" y="57" fill="#C9D5E8" font-family="Arial, sans-serif" font-size="12">Reviews completed (${totalReviews})</text>
   ${gridLines}
-
-  <path
-    d="${linePath("pullRequests")}"
-    fill="none"
-    stroke="#00D4FF"
-    stroke-width="3"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  />
-
-  <path
-    d="${linePath("reviews")}"
-    fill="none"
-    stroke="#9B7CFF"
-    stroke-width="3"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  />
-
-  ${chartPoints("pullRequests", "#00D4FF")}
-  ${chartPoints("reviews", "#9B7CFF")}
-
+  <path d="${linePath("pullRequests")}" fill="none" stroke="#00D4FF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="${linePath("reviews")}" fill="none" stroke="#9B7CFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  ${points("pullRequests", "#00D4FF")}
+  ${points("reviews", "#9B7CFF")}
   ${monthLabels}
-
-  <text
-    x="${width / 2}"
-    y="${height - 15}"
-    text-anchor="middle"
-    fill="#64748B"
-    font-family="Arial, sans-serif"
-    font-size="11"
-  >
-    Month
-  </text>
-</svg>
-`.trim();
+  <text x="${width / 2}" y="${height - 15}" text-anchor="middle" fill="#64748B" font-family="Arial, sans-serif" font-size="11">Month</text>
+</svg>`;
 }
 
 async function main() {
-  const { pullRequests, reviews } = await fetchContributions();
+  await fetchPullRequests();
+  await fetchReviews();
 
-  const months = createMonths();
-  const monthMap = new Map(months.map((month) => [month.key, month]));
-
-  for (const contribution of pullRequests) {
-    addContribution(monthMap, contribution.occurredAt, "pullRequests");
-  }
-
-  for (const contribution of reviews) {
-    addContribution(monthMap, contribution.occurredAt, "reviews");
-  }
-
-  const outputPath = path.join(
-    process.cwd(),
-    "assets",
-    "pr-review-chart.svg"
-  );
-
+  const outputPath = path.join(process.cwd(), "assets", "pr-review-chart.svg");
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-  fs.writeFileSync(outputPath, `${generateChart(months)}\n`, "utf8");
-
-  console.log(`Chart generated successfully: ${outputPath}`);
+  fs.writeFileSync(outputPath, generateChart(months) + "\n", "utf8");
+  console.log(`Chart generated: ${outputPath}`);
 }
 
 main().catch((error) => {
