@@ -1,4 +1,4 @@
-name: Update Pull Request and Code Review Chart
+name: Update GitHub Analytics Assets
 
 on:
   schedule:
@@ -10,13 +10,18 @@ permissions:
   contents: write
 
 jobs:
-  update-chart:
-    name: Generate contribution chart
+  update-assets:
+    name: Generate analytics SVGs
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout profile repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
 
       - name: Generate PR and review chart
         env:
@@ -24,17 +29,26 @@ jobs:
           GITHUB_LOGIN: azizullahaziz
         run: node scripts/generate-pr-review-chart.mjs
 
-      - name: Commit updated chart
+      - name: Generate GitHub stats SVGs
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_LOGIN: azizullahaziz
+        run: node scripts/generate-github-stats.mjs
+
+      - name: Commit updated assets
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add assets/pr-review-chart.svg
+          git add assets/pr-review-chart.svg \
+                  assets/github-overview.svg \
+                  assets/github-streak.svg \
+                  assets/github-top-languages.svg
 
           if git diff --cached --quiet; then
-            echo "No chart changes detected."
+            echo "No asset changes detected."
             exit 0
           fi
 
-          git commit -m "chore: update pull request and review chart"
+          git commit -m "chore: update github analytics assets"
           git push
