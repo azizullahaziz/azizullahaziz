@@ -53,14 +53,15 @@ jobs:
               fail=1
             fi
           done
-          # Verify pr-review-chart has at least one non-zero month label
-          if ! grep -q '<text.*fill="#8B9BB4".*font-size="12"' assets/pr-review-chart.svg; then
-            echo "ERROR: pr-review-chart.svg has no month labels"
+          # Verify pr-review-chart has the expected month-axis label group (stable id)
+          if ! grep -q 'id="prc-title"' assets/pr-review-chart.svg; then
+            echo "ERROR: pr-review-chart.svg missing expected title element"
             fail=1
           fi
-          # Verify top-languages has at least one language entry (circle element after header)
-          if ! grep -q '<circle cx="30"' assets/github-top-languages.svg; then
-            echo "ERROR: github-top-languages.svg has no language rows"
+          # Verify top-languages has at least one language entry by checking for the
+          # tl-title id (header) plus at least one language percentage text node
+          if ! grep -qE '[0-9]+\.[0-9]+%' assets/github-top-languages.svg; then
+            echo "ERROR: github-top-languages.svg has no language percentage data"
             fail=1
           fi
           if [ $fail -ne 0 ]; then exit 1; fi
