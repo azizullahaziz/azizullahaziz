@@ -13,22 +13,22 @@
   
     <circle cx="30" cy="73" r="5" fill="#F1E05A"/>
     <text x="42" y="77" fill="#C9D5E8" font-family="Arial, sans-serif" font-size="12">JavaScript</text>
-    <rect x="130" y="68" width="153" height="8" rx="4" fill="#F1E05A" opacity="0.85"/>
-    <text x="485" y="77" text-anchor="end" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="11">41.8%</text>
+    <rect x="130" y="68" width="159" height="8" rx="4" fill="#F1E05A" opacity="0.85"/>
+    <text x="485" y="77" text-anchor="end" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="11">43.7%</text>
     <circle cx="30" cy="97" r="5" fill="#3178C6"/>
     <text x="42" y="101" fill="#C9D5E8" font-family="Arial, sans-serif" font-size="12">TypeScript</text>
-    <rect x="130" y="92" width="82" height="8" rx="4" fill="#3178C6" opacity="0.85"/>
-    <text x="485" y="101" text-anchor="end" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="11">22.6%</text>
+    <rect x="130" y="92" width="80" height="8" rx="4" fill="#3178C6" opacity="0.85"/>
+    <text x="485" y="101" text-anchor="end" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="11">21.9%</text>
     <circle cx="30" cy="121" r="5" fill="#563D7C"/>
     <text x="42" y="125" fill="#C9D5E8" font-family="Arial, sans-serif" font-size="12">CSS</text>
-    <rect x="130" y="116" width="56" height="8" rx="4" fill="#563D7C" opacity="0.85"/>
-    <text x="485" y="125" text-anchor="end" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="11">15.4%</text>
+    <rect x="130" y="116" width="54" height="8" rx="4" fill="#563D7C" opacity="0.85"/>
+    <text x="485" y="125" text-anchor="end" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="11">14.9%</text>
     <circle cx="30" cy="145" r="5" fill="#4F5D95"/>
     <text x="42" y="149" fill="#C9D5E8" font-family="Arial, sans-serif" font-size="12">PHP</text>
-    <rect x="130" y="140" width="43" height="8" rx="4" fill="#4F5D95" opacity="0.85"/>
-    <text x="485" y="149" text-anchor="end" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="11">11.7%</text>
+    <rect x="130" y="140" width="41" height="8" rx="4" fill="#4F5D95" opacity="0.85"/>
+    <text x="485" y="149" text-anchor="end" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="11">11.3%</text>
     <circle cx="30" cy="169" r="5" fill="#E34C26"/>
     <text x="42" y="173" fill="#C9D5E8" font-family="Arial, sans-serif" font-size="12">HTML</text>
-    <rect x="130" y="164" width="31" height="8" rx="4" fill="#E34C26" opacity="0.85"/>
-    <text x="485" y="173" text-anchor="end" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="11">8.5%</text>
+    <rect x="130" y="164" width="30" height="8" rx="4" fill="#E34C26" opacity="0.85"/>
+    <text x="485" y="173" text-anchor="end" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="11">8.2%</text>
 </svg>
