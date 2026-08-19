@@ -11,7 +11,7 @@
   <text x="247.5" y="54" text-anchor="middle" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="11">azizullahaziz</text>
 
   <!-- Current streak -->
-  <text x="123.75" y="105" text-anchor="middle" fill="#00D4FF" font-family="Arial, sans-serif" font-size="42" font-weight="700">2</text>
+  <text x="123.75" y="105" text-anchor="middle" fill="#00D4FF" font-family="Arial, sans-serif" font-size="42" font-weight="700">0</text>
   <text x="123.75" y="128" text-anchor="middle" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="12">Current Streak</text>
   <text x="123.75" y="145" text-anchor="middle" fill="#64748B" font-family="Arial, sans-serif" font-size="11">days</text>
 
