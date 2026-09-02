@@ -84,6 +84,52 @@ async function fetchPullRequestsAndReviews(discovery) {
     inaccessibleRepositories: new Set(),
   };
 
+  try {
+    const fetchContributions = async (connectionName, monthKey) => {
+      let after = null;
+      while (true) {
+        const data = await client.graphql(
+          `query($login: String!, $from: DateTime!, $to: DateTime!, $after: String) {
+            user(login: $login) {
+              contributionsCollection(from: $from, to: $to) {
+                ${connectionName}(first: 100, after: $after) {
+                  pageInfo { hasNextPage endCursor }
+                  nodes { occurredAt }
+                }
+              }
+            }
+          }`,
+          {
+            login: canonicalLogin,
+            from: rangeStart.toISOString(),
+            to: rangeEndExclusive.toISOString(),
+            after,
+          }
+        );
+        const connection = data.user?.contributionsCollection?.[connectionName];
+        if (!connection || !Array.isArray(connection.nodes)) {
+          throw new Error(`Malformed ${connectionName} response`);
+        }
+        for (const contribution of connection.nodes) {
+          if (incrementMonth(contribution.occurredAt, monthKey)) {
+            diagnostics[monthKey === "pullRequests" ? "authoredPullRequests" : "submittedReviews"] += 1;
+          }
+        }
+        if (!connection.pageInfo?.hasNextPage) break;
+        after = connection.pageInfo.endCursor;
+        await sleep(150);
+      }
+    };
+
+    await fetchContributions("pullRequestContributions", "pullRequests");
+    await fetchContributions("pullRequestReviewContributions", "reviews");
+    diagnostics.activitySource = "GraphQL contributions";
+    return diagnostics;
+  } catch (error) {
+    diagnostics.activitySource = "repository search fallback";
+    diagnostics.skippedRepositories.push(`GraphQL contribution activity failed (${error.message})`);
+  }
+
   for (const repository of discovery.repositories) {
     const { owner, name, nameWithOwner } = repository;
 
