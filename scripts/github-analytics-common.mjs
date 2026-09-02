@@ -5,9 +5,9 @@ export function getConfiguredLogin() {
 }
 
 export function getGitHubToken() {
-  const token = process.env.PROFILE_ANALYTICS_TOKEN || process.env.GITHUB_TOKEN;
+  const token = process.env.PROFILE_ANALYTICS_TOKEN;
   if (!token) {
-    throw new Error("PROFILE_ANALYTICS_TOKEN or GITHUB_TOKEN is required.");
+    throw new Error("PROFILE_ANALYTICS_TOKEN is required for organization-wide analytics.");
   }
   return token;
 }
@@ -303,6 +303,42 @@ async function discoverSearchRepositories({ request, repoMap, diagnostics, sourc
   }
 }
 
+async function discoverContributionRepositories({ graphql, login, repoMap, diagnostics }) {
+  const to = new Date();
+  const from = new Date(Date.UTC(to.getUTCFullYear() - 1, to.getUTCMonth(), to.getUTCDate()));
+  let cursor = null;
+
+  for (const contributionType of ["pullRequestContributions", "pullRequestReviewContributions"]) {
+    cursor = null;
+    while (true) {
+      const data = await graphql(
+        `query($login: String!, $from: DateTime!, $to: DateTime!, $after: String) {
+          user(login: $login) {
+            contributionsCollection(from: $from, to: $to) {
+              ${contributionType}(first: 100, after: $after) {
+                pageInfo { hasNextPage endCursor }
+                nodes {
+                  repository { name nameWithOwner isPrivate isFork owner { login } }
+                }
+              }
+            }
+          }
+        }`,
+        { login, from: from.toISOString(), to: to.toISOString(), after: cursor }
+      );
+      const connection = data.user?.contributionsCollection?.[contributionType];
+      if (!connection || !Array.isArray(connection.nodes)) {
+        diagnostics.warnings.push(`activity repositories: malformed ${contributionType} response`);
+        break;
+      }
+      for (const node of connection.nodes) addRepo(repoMap, node?.repository, "activity");
+      if (!connection.pageInfo?.hasNextPage) break;
+      cursor = connection.pageInfo.endCursor;
+      await sleep(150);
+    }
+  }
+}
+
 export async function discoverRepositories({ client, login }) {
   const diagnostics = {
     warnings: [],
@@ -329,6 +365,7 @@ export async function discoverRepositories({ client, login }) {
     { key: "owned", run: () => discoverOwnedRepositories({ graphql: client.graphql, login: canonicalLogin, repoMap, diagnostics }) },
     { key: "contributed", run: () => discoverContributedRepositories({ graphql: client.graphql, login: canonicalLogin, repoMap, diagnostics }) },
     { key: "organization", run: () => discoverOrganizationRepositories({ graphql: client.graphql, login: canonicalLogin, repoMap, diagnostics }) },
+    { key: "activity", run: () => discoverContributionRepositories({ graphql: client.graphql, login: canonicalLogin, repoMap, diagnostics }) },
     {
       key: "authored-pr-search",
       run: () =>

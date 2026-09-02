@@ -84,6 +84,57 @@ async function fetchPullRequestsAndReviews(discovery) {
     inaccessibleRepositories: new Set(),
   };
 
+  try {
+    const activityDates = { pullRequests: [], reviews: [] };
+    const fetchContributions = async (connectionName, monthKey) => {
+      let after = null;
+      while (true) {
+        const data = await client.graphql(
+          `query($login: String!, $from: DateTime!, $to: DateTime!, $after: String) {
+            user(login: $login) {
+              contributionsCollection(from: $from, to: $to) {
+                ${connectionName}(first: 100, after: $after) {
+                  pageInfo { hasNextPage endCursor }
+                  nodes { occurredAt }
+                }
+              }
+            }
+          }`,
+          {
+            login: canonicalLogin,
+            from: rangeStart.toISOString(),
+            to: rangeEndExclusive.toISOString(),
+            after,
+          }
+        );
+        const connection = data.user?.contributionsCollection?.[connectionName];
+        if (!connection || !Array.isArray(connection.nodes)) {
+          throw new Error(`Malformed ${connectionName} response`);
+        }
+        for (const contribution of connection.nodes) {
+          activityDates[monthKey].push(contribution.occurredAt);
+        }
+        if (!connection.pageInfo?.hasNextPage) break;
+        after = connection.pageInfo.endCursor;
+        await sleep(150);
+      }
+    };
+
+    await fetchContributions("pullRequestContributions", "pullRequests");
+    await fetchContributions("pullRequestReviewContributions", "reviews");
+    for (const date of activityDates.pullRequests) {
+      if (incrementMonth(date, "pullRequests")) diagnostics.authoredPullRequests += 1;
+    }
+    for (const date of activityDates.reviews) {
+      if (incrementMonth(date, "reviews")) diagnostics.submittedReviews += 1;
+    }
+    diagnostics.activitySource = "GraphQL contributions";
+    return diagnostics;
+  } catch (error) {
+    diagnostics.activitySource = "repository search fallback";
+    diagnostics.skippedRepositories.push(`GraphQL contribution activity failed (${error.message})`);
+  }
+
   for (const repository of discovery.repositories) {
     const { owner, name, nameWithOwner } = repository;
 
