@@ -240,7 +240,7 @@ Created repeatable deployment pipelines for containerized applications and distr
 
 ## 📊 Pull Requests & Code Reviews
 
-Monthly engineering collaboration over the last 12 months.
+Monthly engineering collaboration over the last 12 months (UTC), across accessible/discoverable repositories.
 
 This chart compares **pull requests opened** with **pull-request reviews completed**.
 
@@ -257,6 +257,7 @@ This chart compares **pull requests opened** with **pull-request reviews complet
 ## 📈 GitHub Overview
 
 > Analytics assets are generated automatically by GitHub Actions and committed to this repository.
+> Scope note: charts cover repositories discoverable with the workflow token (owned, contributed, organization-accessible, PR/review-linked). Private org repositories require token permission and organization SSO authorization.
 
 <p align="center">
   <img

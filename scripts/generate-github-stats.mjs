@@ -1,65 +1,23 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  createGitHubClient,
+  discoverRepositories,
+  escapeXml,
+  getConfiguredLogin,
+  getGitHubToken,
+} from "./github-analytics-common.mjs";
 
-const githubLogin = process.env.GITHUB_LOGIN || "azizullahaziz";
-const githubToken = process.env.GITHUB_TOKEN;
+const configuredLogin = getConfiguredLogin();
+const githubToken = getGitHubToken();
 
-if (!githubToken) {
-  throw new Error("GITHUB_TOKEN is required.");
-}
-
-async function githubGet(url) {
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `token ${githubToken}`,
-      Accept: "application/vnd.github+json",
-      "User-Agent": "azizullahaziz-github-stats",
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-  });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`GitHub API error ${response.status} for ${url}: ${text}`);
-  }
-  return response.json();
-}
-
-async function graphql(query, variables = {}) {
-  const response = await fetch("https://api.github.com/graphql", {
-    method: "POST",
-    headers: {
-      Authorization: `token ${githubToken}`,
-      "Content-Type": "application/json",
-      "User-Agent": "azizullahaziz-github-stats",
-    },
-    body: JSON.stringify({ query, variables }),
-  });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`GraphQL error ${response.status}: ${text}`);
-  }
-  const result = await response.json();
-  if (result.errors) {
-    throw new Error(`GraphQL errors: ${JSON.stringify(result.errors)}`);
-  }
-  return result.data;
-}
-
-function escapeXml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&apos;");
-}
-
-// ─── Fetch user profile ───────────────────────────────────────────────────────
+const client = createGitHubClient({
+  token: githubToken,
+  userAgent: "azizullahaziz-github-stats",
+});
 
 async function fetchUser() {
-  const data = await githubGet(
-    `https://api.github.com/users/${githubLogin}`
-  );
+  const data = await client.githubGet(`https://api.github.com/users/${configuredLogin}`);
   return {
     publicRepos: data.public_repos,
     followers: data.followers,
@@ -67,27 +25,23 @@ async function fetchUser() {
   };
 }
 
-// ─── Fetch all non-forked repos ───────────────────────────────────────────────
-
-async function fetchRepos() {
+async function fetchOwnedRepos() {
   const repos = [];
   let page = 1;
   while (true) {
-    const data = await githubGet(
-      `https://api.github.com/users/${githubLogin}/repos?per_page=100&page=${page}&type=owner`
+    const data = await client.githubGet(
+      `https://api.github.com/users/${configuredLogin}/repos?per_page=100&page=${page}&type=owner`
     );
     repos.push(...data);
     if (data.length < 100) break;
-    page++;
+    page += 1;
   }
   return repos;
 }
 
-// ─── Contribution calendar via GraphQL ───────────────────────────────────────
-
-async function fetchContributionCalendar() {
-  const data = await graphql(`
-    query($login: String!) {
+async function fetchContributionCalendar(login) {
+  const data = await client.graphql(
+    `query($login: String!) {
       user(login: $login) {
         contributionsCollection {
           contributionCalendar {
@@ -101,40 +55,31 @@ async function fetchContributionCalendar() {
           }
         }
       }
-    }
-  `, { login: githubLogin });
+    }`,
+    { login }
+  );
 
   return data.user.contributionsCollection.contributionCalendar;
 }
 
-// ─── Streak calculation ───────────────────────────────────────────────────────
-
 function calculateStreaks(calendar) {
-  const days = calendar.weeks
-    .flatMap((w) => w.contributionDays)
-    .sort((a, b) => a.date.localeCompare(b.date));
+  const days = calendar.weeks.flatMap((w) => w.contributionDays).sort((a, b) => a.date.localeCompare(b.date));
 
   let currentStreak = 0;
   let longestStreak = 0;
   let streak = 0;
   const today = new Date().toISOString().slice(0, 10);
 
-  // Walk backwards from today to find current streak
   let i = days.length - 1;
-  // skip today if no contributions yet (still in progress)
-  if (days[i] && days[i].date === today && days[i].contributionCount === 0) {
-    i--;
-  }
+  if (days[i] && days[i].date === today && days[i].contributionCount === 0) i -= 1;
   while (i >= 0 && days[i].contributionCount > 0) {
-    currentStreak++;
-    i--;
+    currentStreak += 1;
+    i -= 1;
   }
 
-  // Find longest streak
-  streak = 0;
   for (const day of days) {
     if (day.contributionCount > 0) {
-      streak++;
+      streak += 1;
       if (streak > longestStreak) longestStreak = streak;
     } else {
       streak = 0;
@@ -144,37 +89,57 @@ function calculateStreaks(calendar) {
   return { currentStreak, longestStreak };
 }
 
-// ─── Language aggregation ─────────────────────────────────────────────────────
-
-async function fetchLanguages(repos) {
+async function fetchLanguages(repositories, concurrency = 5) {
+  const candidates = repositories.filter((r) => !r.isFork);
   const langBytes = new Map();
-  const ownRepos = repos.filter((r) => !r.fork);
+  const skippedRepositories = [];
 
-  for (const repo of ownRepos) {
-    if (repo.size === 0) continue;
-    try {
-      const langs = await githubGet(
-        `https://api.github.com/repos/${repo.full_name}/languages`
-      );
-      for (const [lang, bytes] of Object.entries(langs)) {
-        langBytes.set(lang, (langBytes.get(lang) || 0) + bytes);
+  let scannedRepositories = 0;
+  let repositoriesWithLanguageData = 0;
+  let index = 0;
+
+  async function worker() {
+    while (true) {
+      const current = candidates[index++];
+      if (!current) return;
+
+      scannedRepositories += 1;
+      try {
+        const langs = await client.githubGet(`https://api.github.com/repos/${current.nameWithOwner}/languages`);
+        const entries = Object.entries(langs || {});
+        if (entries.length > 0) repositoriesWithLanguageData += 1;
+        for (const [lang, bytes] of entries) {
+          langBytes.set(lang, (langBytes.get(lang) || 0) + Number(bytes));
+        }
+      } catch (error) {
+        skippedRepositories.push(`${current.nameWithOwner}: ${error.message}`);
       }
-    } catch {
-      // skip repos that return errors
     }
-    await new Promise((r) => setTimeout(r, 100));
   }
 
-  const total = Array.from(langBytes.values()).reduce((s, v) => s + v, 0);
-  const sorted = Array.from(langBytes.entries())
-    .sort((a, b) => b[1] - a[1])
+  await Promise.all(Array.from({ length: Math.min(concurrency, Math.max(candidates.length, 1)) }, () => worker()));
+
+  const total = Array.from(langBytes.values()).reduce((sum, value) => sum + value, 0);
+  const langs = Array.from(langBytes.entries())
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .slice(0, 8)
-    .map(([lang, bytes]) => ({ lang, bytes, pct: total > 0 ? bytes / total : 0 }));
+    .map(([lang, bytes]) => ({
+      lang,
+      bytes,
+      pct: total > 0 ? bytes / total : 0,
+    }));
 
-  return { langs: sorted, total };
+  return {
+    langs,
+    total,
+    diagnostics: {
+      accessibleRepositories: candidates.length,
+      scannedRepositories,
+      repositoriesWithLanguageData,
+      skippedRepositories,
+    },
+  };
 }
-
-// ─── SVG generators ──────────────────────────────────────────────────────────
 
 const LANG_COLORS = {
   PHP: "#4F5D95",
@@ -220,7 +185,7 @@ function generateOverviewSvg({ publicRepos, followers, following, totalStars, to
     .join("");
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="ov-title">
-  <title id="ov-title">GitHub Overview for ${escapeXml(githubLogin)}</title>
+  <title id="ov-title">GitHub Overview for ${escapeXml(configuredLogin)}</title>
   <defs>
     <linearGradient id="ov-bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#101827"/>
@@ -229,7 +194,7 @@ function generateOverviewSvg({ publicRepos, followers, following, totalStars, to
   </defs>
   <rect width="100%" height="100%" rx="10" fill="url(#ov-bg)"/>
   <text x="30" y="40" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="17" font-weight="700">📊 GitHub Overview</text>
-  <text x="30" y="58" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="11">${escapeXml(githubLogin)}</text>
+  <text x="30" y="58" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="11">${escapeXml(configuredLogin)}</text>
   <line x1="30" y1="66" x2="${width - 30}" y2="66" stroke="#26334D" stroke-width="1"/>
   ${rows}
 </svg>`;
@@ -240,7 +205,7 @@ function generateStreakSvg({ currentStreak, longestStreak, totalContributions })
   const height = 195;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="sk-title">
-  <title id="sk-title">GitHub Contribution Streak for ${escapeXml(githubLogin)}</title>
+  <title id="sk-title">GitHub Contribution Streak for ${escapeXml(configuredLogin)}</title>
   <defs>
     <linearGradient id="sk-bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#101827"/>
@@ -249,17 +214,14 @@ function generateStreakSvg({ currentStreak, longestStreak, totalContributions })
   </defs>
   <rect width="100%" height="100%" rx="10" fill="url(#sk-bg)"/>
   <text x="${width / 2}" y="36" text-anchor="middle" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="17" font-weight="700">🔥 Contribution Streak</text>
-  <text x="${width / 2}" y="54" text-anchor="middle" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="11">${escapeXml(githubLogin)}</text>
+  <text x="${width / 2}" y="54" text-anchor="middle" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="11">${escapeXml(configuredLogin)}</text>
 
-  <!-- Current streak -->
   <text x="${width / 4}" y="105" text-anchor="middle" fill="#00D4FF" font-family="Arial, sans-serif" font-size="42" font-weight="700">${currentStreak}</text>
   <text x="${width / 4}" y="128" text-anchor="middle" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="12">Current Streak</text>
   <text x="${width / 4}" y="145" text-anchor="middle" fill="#64748B" font-family="Arial, sans-serif" font-size="11">days</text>
 
-  <!-- Divider -->
   <line x1="${width / 2}" y1="75" x2="${width / 2}" y2="155" stroke="#26334D" stroke-width="1"/>
 
-  <!-- Longest streak -->
   <text x="${(3 * width) / 4}" y="105" text-anchor="middle" fill="#9B7CFF" font-family="Arial, sans-serif" font-size="42" font-weight="700">${longestStreak}</text>
   <text x="${(3 * width) / 4}" y="128" text-anchor="middle" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="12">Longest Streak</text>
   <text x="${(3 * width) / 4}" y="145" text-anchor="middle" fill="#64748B" font-family="Arial, sans-serif" font-size="11">days</text>
@@ -268,29 +230,38 @@ function generateStreakSvg({ currentStreak, longestStreak, totalContributions })
 </svg>`;
 }
 
-function generateTopLanguagesSvg({ langs }) {
+function generateTopLanguagesSvg({ langs, discovery, diagnostics }) {
   const width = 495;
   const barHeight = 8;
   const rowHeight = 24;
-  const headerHeight = 68;
-  const footerHeight = 16;
-  const height = headerHeight + langs.length * rowHeight + footerHeight;
+  const headerHeight = 86;
+  const footerHeight = 40;
 
-  const rows = langs
-    .map((l, i) => {
-      const barY = headerHeight + i * rowHeight;
-      const barWidth = Math.max(2, Math.round(l.pct * (width - 130)));
-      const pctText = `${(l.pct * 100).toFixed(1)}%`;
-      return `
+  const hasData = langs.length > 0;
+  const height = headerHeight + Math.max(langs.length, 2) * rowHeight + footerHeight;
+
+  const rows = hasData
+    ? langs
+        .map((l, i) => {
+          const barY = headerHeight + i * rowHeight;
+          const barWidth = Math.max(2, Math.round(l.pct * (width - 130)));
+          const pctText = `${(l.pct * 100).toFixed(1)}%`;
+          return `
     <circle cx="30" cy="${barY + barHeight / 2 + 1}" r="5" fill="${langColor(l.lang)}"/>
     <text x="42" y="${barY + barHeight / 2 + 5}" fill="#C9D5E8" font-family="Arial, sans-serif" font-size="12">${escapeXml(l.lang)}</text>
     <rect x="130" y="${barY}" width="${barWidth}" height="${barHeight}" rx="4" fill="${langColor(l.lang)}" opacity="0.85"/>
     <text x="${width - 10}" y="${barY + barHeight / 2 + 5}" text-anchor="end" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="11">${pctText}</text>`;
-    })
-    .join("");
+        })
+        .join("")
+    : `
+    <text x="30" y="${headerHeight + 16}" fill="#C9D5E8" font-family="Arial, sans-serif" font-size="12">No language bytes found in scanned accessible repositories.</text>
+    <text x="30" y="${headerHeight + 36}" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="11">Diagnostics: scanned ${diagnostics.scannedRepositories}, skipped ${diagnostics.skippedRepositories.length}, with data ${diagnostics.repositoriesWithLanguageData}.</text>`;
+
+  const scopeText = `Accessible/discoverable repositories (owned, contributed, org, PR/review-linked) · forks excluded`; 
+  const diagText = `Repos discovered ${discovery.diagnostics.discoveredRepositoryCount} (public ${discovery.diagnostics.publicRepositoryCount}, private ${discovery.diagnostics.privateRepositoryCount}) · scanned ${diagnostics.scannedRepositories}/${diagnostics.accessibleRepositories} · skipped ${diagnostics.skippedRepositories.length}`;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="tl-title">
-  <title id="tl-title">Top Languages for ${escapeXml(githubLogin)}</title>
+  <title id="tl-title">Top Languages for ${escapeXml(configuredLogin)}</title>
   <defs>
     <linearGradient id="tl-bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#101827"/>
@@ -299,49 +270,67 @@ function generateTopLanguagesSvg({ langs }) {
   </defs>
   <rect width="100%" height="100%" rx="10" fill="url(#tl-bg)"/>
   <text x="30" y="36" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="17" font-weight="700">💻 Top Languages</text>
-  <text x="30" y="54" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="11">${escapeXml(githubLogin)} · own repositories only</text>
-  <line x1="30" y1="62" x2="${width - 30}" y2="62" stroke="#26334D" stroke-width="1"/>
+  <text x="30" y="53" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="10">${escapeXml(scopeText)}</text>
+  <text x="30" y="67" fill="#8B9BB4" font-family="Arial, sans-serif" font-size="10">${escapeXml(diagText)}</text>
+  <line x1="30" y1="74" x2="${width - 30}" y2="74" stroke="#26334D" stroke-width="1"/>
   ${rows}
+  <text x="30" y="${height - 12}" fill="#64748B" font-family="Arial, sans-serif" font-size="10">Private organization repositories require token permission and organization SSO authorization.</text>
 </svg>`;
 }
-
-// ─── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
   console.log("Fetching user profile...");
   const user = await fetchUser();
 
-  console.log("Fetching repositories...");
-  const repos = await fetchRepos();
-  const totalStars = repos
-    .filter((r) => !r.fork)
-    .reduce((s, r) => s + r.stargazers_count, 0);
+  console.log("Fetching owned repositories for stars...");
+  const ownedRepos = await fetchOwnedRepos();
+  const totalStars = ownedRepos.filter((r) => !r.fork).reduce((sum, repo) => sum + repo.stargazers_count, 0);
+
+  console.log("Discovering repositories for analytics scope...");
+  const discovery = await discoverRepositories({ client, login: configuredLogin });
+  console.log(`[Discovery] Repositories=${discovery.diagnostics.discoveredRepositoryCount} public=${discovery.diagnostics.publicRepositoryCount} private=${discovery.diagnostics.privateRepositoryCount}`);
+  if (discovery.diagnostics.sourceFailures.length > 0) {
+    console.log(`[Discovery] Source failures: ${discovery.diagnostics.sourceFailures.join(" | ")}`);
+  }
+  if (discovery.diagnostics.warnings.length > 0) {
+    console.log(`[Discovery] Warnings: ${discovery.diagnostics.warnings.join(" | ")}`);
+  }
 
   console.log("Fetching contribution calendar...");
-  const calendar = await fetchContributionCalendar();
+  const calendar = await fetchContributionCalendar(discovery.login);
   const streaks = calculateStreaks(calendar);
   const totalContributions = calendar.totalContributions;
 
-  console.log("Fetching language data...");
-  const { langs } = await fetchLanguages(repos);
+  console.log("Fetching language data from discoverable repositories...");
+  const { langs, diagnostics: languageDiagnostics } = await fetchLanguages(discovery.repositories, 5);
+  console.log(`[Languages] Accessible repositories (forks excluded)=${languageDiagnostics.accessibleRepositories}`);
+  console.log(`[Languages] Scanned=${languageDiagnostics.scannedRepositories} withData=${languageDiagnostics.repositoriesWithLanguageData} skipped=${languageDiagnostics.skippedRepositories.length}`);
+  if (languageDiagnostics.skippedRepositories.length > 0) {
+    console.log(`[Languages] Skipped detail: ${languageDiagnostics.skippedRepositories.slice(0, 5).join(" | ")}${languageDiagnostics.skippedRepositories.length > 5 ? ` | +${languageDiagnostics.skippedRepositories.length - 5} more` : ""}`);
+  }
 
   const assetsDir = path.join(process.cwd(), "assets");
   fs.mkdirSync(assetsDir, { recursive: true });
 
-  const overviewSvg = generateOverviewSvg({
-    ...user,
-    totalStars,
-    totalContributions,
-  });
-  fs.writeFileSync(path.join(assetsDir, "github-overview.svg"), overviewSvg + "\n", "utf8");
+  fs.writeFileSync(
+    path.join(assetsDir, "github-overview.svg"),
+    generateOverviewSvg({ ...user, totalStars, totalContributions }) + "\n",
+    "utf8"
+  );
   console.log("Generated assets/github-overview.svg");
 
-  const streakSvg = generateStreakSvg({ ...streaks, totalContributions });
-  fs.writeFileSync(path.join(assetsDir, "github-streak.svg"), streakSvg + "\n", "utf8");
+  fs.writeFileSync(
+    path.join(assetsDir, "github-streak.svg"),
+    generateStreakSvg({ ...streaks, totalContributions }) + "\n",
+    "utf8"
+  );
   console.log("Generated assets/github-streak.svg");
 
-  const topLangsSvg = generateTopLanguagesSvg({ langs });
-  fs.writeFileSync(path.join(assetsDir, "github-top-languages.svg"), topLangsSvg + "\n", "utf8");
+  fs.writeFileSync(
+    path.join(assetsDir, "github-top-languages.svg"),
+    generateTopLanguagesSvg({ langs, discovery, diagnostics: languageDiagnostics }) + "\n",
+    "utf8"
+  );
   console.log("Generated assets/github-top-languages.svg");
 }
 

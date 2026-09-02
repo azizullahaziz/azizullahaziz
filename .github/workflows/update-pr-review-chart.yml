@@ -11,6 +11,7 @@ on:
       - main
     paths:
       - "scripts/**"
+      - "assets/**"
       - ".github/workflows/update-pr-review-chart.yml"
 
 permissions:
@@ -34,12 +35,16 @@ jobs:
 
       - name: Generate PR and review chart
         env:
+          # Optional: use a PAT in PROFILE_ANALYTICS_TOKEN for broader org/private analytics
+          # (typically repo + read:org scopes and org SSO authorization when required).
+          PROFILE_ANALYTICS_TOKEN: ${{ secrets.PROFILE_ANALYTICS_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_LOGIN: azizullahaziz
         run: node scripts/generate-pr-review-chart.mjs
 
       - name: Generate GitHub stats SVGs
         env:
+          PROFILE_ANALYTICS_TOKEN: ${{ secrets.PROFILE_ANALYTICS_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_LOGIN: azizullahaziz
         run: node scripts/generate-github-stats.mjs
@@ -48,6 +53,10 @@ jobs:
         run: |
           fail=0
           for svg in assets/pr-review-chart.svg assets/github-overview.svg assets/github-streak.svg assets/github-top-languages.svg; do
+            if [ ! -s "$svg" ]; then
+              echo "ERROR: $svg is empty"
+              fail=1
+            fi
             if grep -qE '(—|Updating automatically|Chart data will appear)' "$svg"; then
               echo "ERROR: $svg contains placeholder content"
               fail=1
@@ -58,10 +67,14 @@ jobs:
             echo "ERROR: pr-review-chart.svg missing expected title element"
             fail=1
           fi
-          # Verify top-languages has at least one language entry by checking for the
-          # tl-title id (header) plus at least one language percentage text node
-          if ! grep -qE '[0-9]+\.[0-9]+%' assets/github-top-languages.svg; then
-            echo "ERROR: github-top-languages.svg has no language percentage data"
+          # Verify PR/review chart has values or explicit diagnostics
+          if ! grep -qE 'PRs [0-9]+|Submitted reviews [0-9]+|Diagnostics:' assets/pr-review-chart.svg; then
+            echo "ERROR: pr-review-chart.svg has no values or diagnostics text"
+            fail=1
+          fi
+          # Verify top-languages has language values or explicit diagnostics
+          if ! grep -qE '[0-9]+\.[0-9]+%|No language bytes found|Diagnostics:' assets/github-top-languages.svg; then
+            echo "ERROR: github-top-languages.svg has no language values or diagnostics"
             fail=1
           fi
           if [ $fail -ne 0 ]; then exit 1; fi
