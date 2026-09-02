@@ -85,6 +85,7 @@ async function fetchPullRequestsAndReviews(discovery) {
   };
 
   try {
+    const activityDates = { pullRequests: [], reviews: [] };
     const fetchContributions = async (connectionName, monthKey) => {
       let after = null;
       while (true) {
@@ -111,9 +112,7 @@ async function fetchPullRequestsAndReviews(discovery) {
           throw new Error(`Malformed ${connectionName} response`);
         }
         for (const contribution of connection.nodes) {
-          if (incrementMonth(contribution.occurredAt, monthKey)) {
-            diagnostics[monthKey === "pullRequests" ? "authoredPullRequests" : "submittedReviews"] += 1;
-          }
+          activityDates[monthKey].push(contribution.occurredAt);
         }
         if (!connection.pageInfo?.hasNextPage) break;
         after = connection.pageInfo.endCursor;
@@ -123,6 +122,12 @@ async function fetchPullRequestsAndReviews(discovery) {
 
     await fetchContributions("pullRequestContributions", "pullRequests");
     await fetchContributions("pullRequestReviewContributions", "reviews");
+    for (const date of activityDates.pullRequests) {
+      if (incrementMonth(date, "pullRequests")) diagnostics.authoredPullRequests += 1;
+    }
+    for (const date of activityDates.reviews) {
+      if (incrementMonth(date, "reviews")) diagnostics.submittedReviews += 1;
+    }
     diagnostics.activitySource = "GraphQL contributions";
     return diagnostics;
   } catch (error) {
