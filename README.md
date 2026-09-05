@@ -236,23 +236,7 @@ Created repeatable deployment pipelines for containerized applications and distr
 
 **Technologies:** GitHub Actions · Docker · Linux · Nginx · Laravel · Spring Boot · React · Angular
 
----
 
-## 📊 Pull Requests & Code Reviews
-
-Monthly engineering collaboration over the last 12 months (UTC), across accessible/discoverable repositories.
-
-This chart compares **pull requests opened** with **pull-request reviews completed**.
-
-<p align="center">
-  <img
-    src="./assets/pr-review-chart.svg"
-    alt="Monthly pull requests opened and pull-request reviews completed"
-    width="900"
-  />
-</p>
-
----
 
 ## 📈 GitHub Overview
 
