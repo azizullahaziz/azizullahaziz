@@ -257,7 +257,7 @@ This chart compares **pull requests opened** with **pull-request reviews complet
 ## 📈 GitHub Overview
 
 > Analytics assets are generated automatically by GitHub Actions and committed to this repository.
-> Scope note: charts cover repositories discoverable with `PROFILE_ANALYTICS_TOKEN` (owned, contributed, organization-accessible, PR/review-linked). The token must have `repo` and `read:org` scopes, and must be SSO-authorized for each organization; otherwise organization activity cannot be retrieved.
+> Scope note: charts use `PROFILE_ANALYTICS_TOKEN` when configured, and otherwise fall back to the workflow `GITHUB_TOKEN`. A PAT with `repo` and `read:org` scopes plus organization SSO authorization is still required for organization/private analytics; otherwise only the data accessible to `GITHUB_TOKEN` can be retrieved.
 
 <p align="center">
   <img

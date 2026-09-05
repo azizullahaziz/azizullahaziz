@@ -23,6 +23,9 @@ jobs:
     runs-on: ubuntu-latest
     # Prevent recursive loops: skip commits made by the Actions bot
     if: github.actor != 'github-actions[bot]'
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      PROFILE_ANALYTICS_TOKEN: ${{ secrets.PROFILE_ANALYTICS_TOKEN }}
 
     steps:
       - name: Checkout profile repository
@@ -33,25 +36,19 @@ jobs:
         with:
           node-version: "20"
 
-      - name: Require organization analytics token
-        env:
-          PROFILE_ANALYTICS_TOKEN: ${{ secrets.PROFILE_ANALYTICS_TOKEN }}
+      - name: Note analytics token scope
         run: |
           if [ -z "$PROFILE_ANALYTICS_TOKEN" ]; then
-            echo "::error::Configure PROFILE_ANALYTICS_TOKEN with repo/read:org scopes and organization SSO authorization."
-            exit 1
+            echo "::notice::PROFILE_ANALYTICS_TOKEN is not configured; falling back to GITHUB_TOKEN, so organization/private analytics may be incomplete."
           fi
 
       - name: Generate PR and review chart
         env:
-          # Required: PAT with repo + read:org scopes and SSO authorization for each organization.
-          PROFILE_ANALYTICS_TOKEN: ${{ secrets.PROFILE_ANALYTICS_TOKEN }}
           GITHUB_LOGIN: azizullahaziz
         run: node scripts/generate-pr-review-chart.mjs
 
       - name: Generate GitHub stats SVGs
         env:
-          PROFILE_ANALYTICS_TOKEN: ${{ secrets.PROFILE_ANALYTICS_TOKEN }}
           GITHUB_LOGIN: azizullahaziz
         run: node scripts/generate-github-stats.mjs
 
