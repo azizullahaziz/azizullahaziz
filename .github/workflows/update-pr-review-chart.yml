@@ -24,7 +24,6 @@ jobs:
     # Prevent recursive loops: skip commits made by the Actions bot
     if: github.actor != 'github-actions[bot]'
     env:
-      GITHUB_TOKEN: ${{ github.token }}
       PROFILE_ANALYTICS_TOKEN: ${{ secrets.PROFILE_ANALYTICS_TOKEN }}
 
     steps:
@@ -44,11 +43,13 @@ jobs:
 
       - name: Generate PR and review chart
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           GITHUB_LOGIN: azizullahaziz
         run: node scripts/generate-pr-review-chart.mjs
 
       - name: Generate GitHub stats SVGs
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           GITHUB_LOGIN: azizullahaziz
         run: node scripts/generate-github-stats.mjs
 
