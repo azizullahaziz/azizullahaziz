@@ -5,9 +5,9 @@ export function getConfiguredLogin() {
 }
 
 export function getGitHubToken() {
-  const token = process.env.PROFILE_ANALYTICS_TOKEN;
+  const token = process.env.PROFILE_ANALYTICS_TOKEN || process.env.GITHUB_TOKEN;
   if (!token) {
-    throw new Error("PROFILE_ANALYTICS_TOKEN is required for organization-wide analytics.");
+    throw new Error("Set PROFILE_ANALYTICS_TOKEN or GITHUB_TOKEN to generate GitHub analytics.");
   }
   return token;
 }
